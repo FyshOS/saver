@@ -1,7 +1,13 @@
 package main
 
 import (
+	"embed"
+	"fmt"
+	"image"
+	"image/png"
 	"time"
+
+	"github.com/nfnt/resize"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -10,33 +16,46 @@ import (
 	"fyne.io/fyne/v2/theme"
 )
 
+const frameCount = 5
+
+var (
+	//go:embed "frames"
+	frames embed.FS
+
+	fyshes [frameCount]image.Image
+)
+
 func main() {
 	a := app.NewWithID("com.fyshos.screensaver")
 	w := a.NewWindow("Screensaver")
 	w.Resize(fyne.NewSize(500, 350))
 
-	ico1 := canvas.NewImageFromFile("fish.png")
-	ico1.Resize(fyne.NewSquareSize(96))
+	for i := 0; i < frameCount; i++ {
+		name := fmt.Sprintf("fysh%d.png", i)
+		frame, _ := frames.Open("frames/" + name)
+
+		full, _ := png.Decode(frame)
+		fyshes[i] = resize.Resize(uint(128), uint(128), full, resize.Lanczos3)
+		_ = frame.Close()
+	}
+
+	ico1 := newFysh(96)
 	l1 := &moveLayout{xInc: 2, yInc: 2}
 
-	ico2 := canvas.NewImageFromFile("fish.png")
-	ico2.Resize(fyne.NewSquareSize(96))
+	ico2 := newFysh(96)
 	ico2.Move(fyne.NewPos(400, 100))
 	l2 := &moveLayout{xInc: 2.2, yInc: 2.2, invertX: true}
 
-	ico3 := canvas.NewImageFromFile("fish.png")
-	ico3.Resize(fyne.NewSquareSize(96))
+	ico3 := newFysh(96)
 	l3 := &moveLayout{xInc: 1.5, yInc: 1.5}
 	ico3.Move(fyne.NewPos(220, 310))
 	l3.invertY = true
 
-	ico4 := canvas.NewImageFromFile("fish.png")
-	ico4.Resize(fyne.NewSquareSize(128))
+	ico4 := newFysh(128)
 	l4 := &moveLayout{xInc: 1, yInc: 1, invertX: true}
 	ico4.Move(fyne.NewPos(450, 200))
 
-	ico5 := canvas.NewImageFromFile("fish.png")
-	ico5.Resize(fyne.NewSquareSize(128))
+	ico5 := newFysh(128)
 	l5 := &moveLayout{xInc: 1, yInc: 1, invertY: true}
 	ico5.Move(fyne.NewPos(150, 300))
 
@@ -70,6 +89,30 @@ func main() {
 	w.SetPadded(false)
 	w.SetFullScreen(true)
 	w.ShowAndRun()
+}
+
+var fyshCount = 0
+
+func newFysh(size int) *canvas.Image {
+	ico := &canvas.Image{}
+	ico.Resize(fyne.NewSquareSize(float32(size)))
+	id := fyshCount % 5
+	fyshCount++
+
+	go func() {
+		for {
+			ico.Image = fyshes[id]
+			ico.Refresh()
+
+			id++
+			if id >= 5 {
+				id = 0
+			}
+			time.Sleep(time.Millisecond * 800)
+		}
+	}()
+
+	return ico
 }
 
 func formattedTime(format string) string { // matching the desktop format
