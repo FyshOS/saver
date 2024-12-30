@@ -51,10 +51,10 @@ func main() {
 
 	w.SetContent(s.MakeUI(a, w))
 	w.Canvas().SetOnTypedRune(func(r rune) {
-		startedInput(a)
+		s.startedInput(a, w)
 	})
 	w.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
-		startedInput(a)
+		s.startedInput(a, w)
 	})
 
 	w.SetPadded(false)
@@ -114,7 +114,7 @@ func (s *ScreenSaver) MakeUI(a fyne.App, w fyne.Window) fyne.CanvasObject {
 
 	return container.NewStack(
 		&cursorCapture{moved: func() {
-			startedInput(a)
+			s.startedInput(a, w)
 		}},
 		container.New(l6, txt),
 		container.New(l5, ico5),
@@ -166,8 +166,13 @@ func clockText(t *canvas.Text, format string) {
 	}
 }
 
-func startedInput(a fyne.App) {
-	a.Quit() // TODO password support
+func (s *ScreenSaver) startedInput(a fyne.App, w fyne.Window) {
+	if !s.Lock {
+		a.Quit()
+		return
+	}
+
+	showLogin(a, w)
 }
 
 type moveLayout struct {
