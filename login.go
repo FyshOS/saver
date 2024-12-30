@@ -14,7 +14,7 @@ import (
 
 var loginDialog dialog.Dialog
 
-func showLogin(a fyne.App, w fyne.Window) {
+func showLogin(unlocked func(), w fyne.Window) {
 	if loginDialog != nil {
 		return
 	}
@@ -41,7 +41,7 @@ func showLogin(a fyne.App, w fyne.Window) {
 			return
 		}
 
-		a.Quit()
+		unlocked()
 	}
 	dismiss := func() {
 		hideCursor(w)

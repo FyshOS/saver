@@ -9,12 +9,11 @@ import (
 func main() {
 	a := app.NewWithID("com.fyshos.fyshsaver")
 
-	s := &saver.ScreenSaver{
-		ClockFormat: a.Preferences().StringWithFallback("clockformatting", "12h"),
-		Label:       a.Preferences().StringWithFallback("fysh.label", "FyshOS"),
-		Lock:        true,
-	}
+	s := saver.NewScreenSaver(a.Quit)
+	s.ClockFormat = a.Preferences().StringWithFallback("clockformatting", "12h")
+	s.Label = a.Preferences().StringWithFallback("fysh.label", "FyshOS")
+	s.Lock = true
 
-	s.ShowWindow(a)
+	s.ShowWindow()
 	a.Run()
 }

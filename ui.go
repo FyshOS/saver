@@ -31,22 +31,28 @@ type ScreenSaver struct {
 	Label       string
 	Lock        bool
 	ClockFormat string
+
+	OnUnlocked func()
+}
+
+func NewScreenSaver(onUnlocked func()) *ScreenSaver {
+	return &ScreenSaver{OnUnlocked: onUnlocked}
 }
 
 func (s *ScreenSaver) showClock() bool {
 	return s.Label == clockLabelKey
 }
 
-func (s *ScreenSaver) ShowWindow(a fyne.App) {
-	w := a.NewWindow("Screensaver")
+func (s *ScreenSaver) ShowWindow() {
+	w := fyne.CurrentApp().NewWindow("Screensaver")
 	w.Resize(fyne.NewSize(500, 350))
 
-	w.SetContent(s.MakeUI(a, w))
+	w.SetContent(s.MakeUI(w))
 	w.Canvas().SetOnTypedRune(func(r rune) {
-		s.startedInput(a, w)
+		s.startedInput(w)
 	})
 	w.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
-		s.startedInput(a, w)
+		s.startedInput(w)
 	})
 
 	w.SetPadded(false)
@@ -55,11 +61,12 @@ func (s *ScreenSaver) ShowWindow(a fyne.App) {
 	go func() {
 		time.Sleep(time.Millisecond * 330)
 		hideCursor(w)
+		grabKeyboard(w)
 	}()
 	w.Show()
 }
 
-func (s *ScreenSaver) MakeUI(a fyne.App, w fyne.Window) fyne.CanvasObject {
+func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 	for i := 0; i < frameCount; i++ {
 		name := fmt.Sprintf("fysh%d.png", i)
 		frame, _ := frames.Open("frames/" + name)
@@ -107,7 +114,7 @@ func (s *ScreenSaver) MakeUI(a fyne.App, w fyne.Window) fyne.CanvasObject {
 
 	return container.NewStack(
 		&cursorCapture{moved: func() {
-			s.startedInput(a, w)
+			s.startedInput(w)
 		}},
 		container.New(l6, txt),
 		container.New(l5, ico5),
@@ -115,6 +122,15 @@ func (s *ScreenSaver) MakeUI(a fyne.App, w fyne.Window) fyne.CanvasObject {
 		container.New(l3, ico3),
 		container.New(l2, ico2),
 		container.New(l1, ico1))
+}
+
+func (s *ScreenSaver) unlock() {
+	if fn := s.OnUnlocked; fn != nil {
+		fn()
+		return
+	}
+
+	fyne.CurrentApp().Quit()
 }
 
 var fyshCount = 0
@@ -159,13 +175,13 @@ func clockText(t *canvas.Text, format string) {
 	}
 }
 
-func (s *ScreenSaver) startedInput(a fyne.App, w fyne.Window) {
+func (s *ScreenSaver) startedInput(w fyne.Window) {
 	if !s.Lock {
-		a.Quit()
+		s.unlock()
 		return
 	}
 
-	showLogin(a, w)
+	showLogin(s.unlock, w)
 }
 
 type moveLayout struct {
