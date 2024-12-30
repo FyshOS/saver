@@ -16,7 +16,10 @@ import (
 	"fyne.io/fyne/v2/theme"
 )
 
-const frameCount = 5
+const (
+	clockLabelKey = "(clock)"
+	frameCount    = 5
+)
 
 var (
 	//go:embed "frames"
@@ -25,11 +28,45 @@ var (
 	fyshes [frameCount]image.Image
 )
 
+type ScreenSaver struct {
+	Label       string
+	Lock        bool
+	ClockFormat string
+}
+
+func (s *ScreenSaver) showClock() bool {
+	return s.Label == clockLabelKey
+}
+
 func main() {
 	a := app.NewWithID("com.fyshos.screensaver")
 	w := a.NewWindow("Screensaver")
 	w.Resize(fyne.NewSize(500, 350))
 
+	s := &ScreenSaver{
+		ClockFormat: a.Preferences().StringWithFallback("clockformatting", "12h"),
+		Label:       a.Preferences().StringWithFallback("fysh.label", "FyshOS"),
+		Lock:        true,
+	}
+
+	w.SetContent(s.MakeUI(a, w))
+	w.Canvas().SetOnTypedRune(func(r rune) {
+		startedInput(a)
+	})
+	w.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
+		startedInput(a)
+	})
+
+	w.SetPadded(false)
+	w.SetFullScreen(true)
+	a.Lifecycle().SetOnEnteredForeground(func() {
+		hideCursor(w)
+	})
+
+	w.ShowAndRun()
+}
+
+func (s *ScreenSaver) MakeUI(a fyne.App, w fyne.Window) fyne.CanvasObject {
 	for i := 0; i < frameCount; i++ {
 		name := fmt.Sprintf("fysh%d.png", i)
 		frame, _ := frames.Open("frames/" + name)
@@ -59,18 +96,14 @@ func main() {
 	l5 := &moveLayout{xInc: 1, yInc: 1, invertY: true}
 	ico5.Move(fyne.NewPos(150, 300))
 
-	label := a.Preferences().StringWithFallback("fysh.label", "FyshOS")
-
-	txt := canvas.NewText(label, theme.Color(theme.ColorNameForeground))
-	//if label == "(clock)" {
-	format := fyne.CurrentApp().Preferences().StringWithFallback("clockformatting", "12h")
-	go clockText(txt, format)
-	//}
+	txt := canvas.NewText(s.Label, theme.Color(theme.ColorNameForeground))
+	if s.showClock() {
+		go clockText(txt, s.ClockFormat)
+	}
 
 	txt.TextSize = 84
 	txt.Resize(txt.MinSize())
 	l6 := &moveLayout{xInc: 1, yInc: 1}
-	w.SetContent(container.NewStack(container.New(l6, txt), container.New(l5, ico5), container.New(l4, ico4), container.New(l3, ico3), container.New(l2, ico2), container.New(l1, ico1)))
 
 	go l1.run()
 	go l2.run()
@@ -79,16 +112,16 @@ func main() {
 	go l5.run()
 	go l6.run()
 
-	w.Canvas().SetOnTypedRune(func(r rune) {
-		startedInput(a)
-	})
-	w.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
-		startedInput(a)
-	})
-
-	w.SetPadded(false)
-	w.SetFullScreen(true)
-	w.ShowAndRun()
+	return container.NewStack(
+		&cursorCapture{moved: func() {
+			startedInput(a)
+		}},
+		container.New(l6, txt),
+		container.New(l5, ico5),
+		container.New(l4, ico4),
+		container.New(l3, ico3),
+		container.New(l2, ico2),
+		container.New(l1, ico1))
 }
 
 var fyshCount = 0
