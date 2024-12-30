@@ -40,14 +40,20 @@ func (s *ScreenSaver) showClock() bool {
 
 func main() {
 	a := app.NewWithID("com.fyshos.screensaver")
-	w := a.NewWindow("Screensaver")
-	w.Resize(fyne.NewSize(500, 350))
 
 	s := &ScreenSaver{
 		ClockFormat: a.Preferences().StringWithFallback("clockformatting", "12h"),
 		Label:       a.Preferences().StringWithFallback("fysh.label", "FyshOS"),
 		Lock:        true,
 	}
+
+	s.ShowWindow(a)
+	a.Run()
+}
+
+func (s *ScreenSaver) ShowWindow(a fyne.App) {
+	w := a.NewWindow("Screensaver")
+	w.Resize(fyne.NewSize(500, 350))
 
 	w.SetContent(s.MakeUI(a, w))
 	w.Canvas().SetOnTypedRune(func(r rune) {
@@ -59,11 +65,12 @@ func main() {
 
 	w.SetPadded(false)
 	w.SetFullScreen(true)
-	a.Lifecycle().SetOnEnteredForeground(func() {
-		hideCursor(w)
-	})
 
-	w.ShowAndRun()
+	go func() {
+		time.Sleep(time.Millisecond * 330)
+		hideCursor(w)
+	}()
+	w.Show()
 }
 
 func (s *ScreenSaver) MakeUI(a fyne.App, w fyne.Window) fyne.CanvasObject {
