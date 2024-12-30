@@ -9,12 +9,12 @@ A screensaver app built using Fyne which augments the FyneDesk desktop and FyshO
 This project can be called as a library as follows:
 
 ```go
-	save := saver.NewScreenSaver(func() {
-		log.Println("Exited")
-    })
-	save.Lock = true
+save := saver.NewScreenSaver(func() {
+	log.Println("Exited")
+})
+save.Lock = true
 
-	save.ShowWindow()
+save.ShowWindow()
 ```
 
 You can also run this screensaver with a demo app in the
