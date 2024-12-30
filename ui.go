@@ -1,4 +1,4 @@
-package main
+package saver
 
 import (
 	"embed"
@@ -10,7 +10,6 @@ import (
 	"github.com/nfnt/resize"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
@@ -36,19 +35,6 @@ type ScreenSaver struct {
 
 func (s *ScreenSaver) showClock() bool {
 	return s.Label == clockLabelKey
-}
-
-func main() {
-	a := app.NewWithID("com.fyshos.screensaver")
-
-	s := &ScreenSaver{
-		ClockFormat: a.Preferences().StringWithFallback("clockformatting", "12h"),
-		Label:       a.Preferences().StringWithFallback("fysh.label", "FyshOS"),
-		Lock:        true,
-	}
-
-	s.ShowWindow(a)
-	a.Run()
 }
 
 func (s *ScreenSaver) ShowWindow(a fyne.App) {

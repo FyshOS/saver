@@ -1,6 +1,6 @@
 //go:build !unix
 
-package main
+package saver
 
 func doHideCursor(w fyne.Window, ctx any) {
 }

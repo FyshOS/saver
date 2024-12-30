@@ -1,4 +1,4 @@
-package main
+package saver
 
 import (
 	"image/color"
