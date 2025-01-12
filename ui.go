@@ -61,7 +61,6 @@ func (s *ScreenSaver) ShowWindow() {
 	go func() {
 		time.Sleep(time.Millisecond * 330)
 		hideCursor(w)
-		grabKeyboard(w)
 	}()
 	w.Show()
 }
