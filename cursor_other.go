@@ -2,8 +2,11 @@
 
 package saver
 
-func doHideCursor(w fyne.Window, ctx any) {
+func initCursor() {
 }
 
-func doShowCursor(w fyne.Window, ctx any) {
+func doHideCursor(ctx any) {
+}
+
+func doShowCursor(ctx any) {
 }

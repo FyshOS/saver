@@ -11,23 +11,30 @@ import (
 
 var conn *xgb.Conn
 
-func doHideCursor(w fyne.Window, ctx any) {
+func initCursor() {
+	var err error
+	conn, err = xgb.NewConn()
+	if err != nil {
+		fyne.LogError("Failed to connect to X11 to hide cursor", err)
+		return
+	}
+
+	err = xfixes.Init(conn)
+	if err != nil {
+		fyne.LogError("Failed to init fixes extension to X11 to hide cursor", err)
+		return
+	}
+
+	r, err := xfixes.QueryVersion(conn, 4, 0).Reply()
+	if err != nil || r.MajorVersion < 4 {
+		return
+	}
+}
+
+func doHideCursor(ctx any) {
 	switch win := ctx.(type) {
 	case driver.X11WindowContext:
-		conn, _ = xgb.NewConn()
-		//if err != nil {
-		//	fyne.LogError("Failed to connect to X11 to hide cursor", err)
-		//	return
-		//}
-
-		err := xfixes.Init(conn)
-		if err != nil {
-			fyne.LogError("Failed to init fixes extension to X11 to hide cursor", err)
-			return
-		}
-
-		r, err := xfixes.QueryVersion(conn, 4, 0).Reply()
-		if err != nil || r.MajorVersion < 4 {
+		if conn == nil {
 			return
 		}
 
@@ -37,9 +44,12 @@ func doHideCursor(w fyne.Window, ctx any) {
 	}
 }
 
-func doShowCursor(w fyne.Window, ctx any) {
+func doShowCursor(ctx any) {
 	switch win := ctx.(type) {
 	case driver.X11WindowContext:
+		if conn == nil {
+			return
+		}
 
 		_ = xfixes.ShowCursorChecked(conn, xproto.Window(win.WindowHandle)).Check()
 	case driver.WaylandWindowContext:

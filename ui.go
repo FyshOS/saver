@@ -36,7 +36,9 @@ type ScreenSaver struct {
 }
 
 func NewScreenSaver(onUnlocked func()) *ScreenSaver {
-	return &ScreenSaver{OnUnlocked: onUnlocked}
+	s := &ScreenSaver{OnUnlocked: onUnlocked}
+	initCursor()
+	return s
 }
 
 func (s *ScreenSaver) showClock() bool {
@@ -57,11 +59,6 @@ func (s *ScreenSaver) ShowWindow() {
 
 	w.SetPadded(false)
 	w.SetFullScreen(true)
-
-	go func() {
-		time.Sleep(time.Millisecond * 330)
-		hideCursor(w)
-	}()
 	w.Show()
 }
 
@@ -110,6 +107,11 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 	go l4.run()
 	go l5.run()
 	go l6.run()
+
+	go func() {
+		time.Sleep(time.Millisecond * 330)
+		hideCursor(w)
+	}()
 
 	return container.NewStack(
 		&cursorCapture{moved: func() {

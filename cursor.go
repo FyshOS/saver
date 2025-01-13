@@ -13,7 +13,7 @@ import (
 func hideCursor(w fyne.Window) {
 	if native, ok := w.(driver.NativeWindow); ok {
 		native.RunNative(func(ctx any) {
-			doHideCursor(w, ctx)
+			doHideCursor(ctx)
 		})
 	}
 }
@@ -21,7 +21,7 @@ func hideCursor(w fyne.Window) {
 func showCursor(w fyne.Window) {
 	if native, ok := w.(driver.NativeWindow); ok {
 		native.RunNative(func(ctx any) {
-			doShowCursor(w, ctx)
+			doShowCursor(ctx)
 		})
 	}
 }
