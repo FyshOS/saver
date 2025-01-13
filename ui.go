@@ -34,6 +34,7 @@ type ScreenSaver struct {
 
 	OnUnlocked func()
 	started    time.Time
+	win        fyne.Window
 }
 
 func NewScreenSaver(onUnlocked func()) *ScreenSaver {
@@ -61,6 +62,7 @@ func (s *ScreenSaver) ShowWindow() {
 
 	w.SetPadded(false)
 	w.SetFullScreen(true)
+	s.win = w
 	w.Show()
 }
 
@@ -128,6 +130,9 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 }
 
 func (s *ScreenSaver) unlock() {
+	if s.win != nil {
+		s.win.Close()
+	}
 	if fn := s.OnUnlocked; fn != nil {
 		fn()
 		return
