@@ -33,11 +33,13 @@ type ScreenSaver struct {
 	ClockFormat string
 
 	OnUnlocked func()
+	started    time.Time
 }
 
 func NewScreenSaver(onUnlocked func()) *ScreenSaver {
 	s := &ScreenSaver{OnUnlocked: onUnlocked}
 	initCursor()
+	s.started = time.Now()
 	return s
 }
 
@@ -177,7 +179,7 @@ func clockText(t *canvas.Text, format string) {
 }
 
 func (s *ScreenSaver) startedInput(w fyne.Window) {
-	if !s.Lock {
+	if !s.Lock || s.started.After(time.Now().Add(time.Second*-2)) {
 		s.unlock()
 		return
 	}
