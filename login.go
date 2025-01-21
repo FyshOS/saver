@@ -38,20 +38,20 @@ func showLogin(unlocked func(), w fyne.Window) {
 		}()
 
 		if !canUnlock(user.Username, input.Text) {
+			hideCursor(w)
 			return
 		}
 
 		unlocked()
 	}
 	dismiss := func() {
-		hideCursor(w)
 		w.Canvas().Focus(nil)
 		loginDialog = nil
 	}
 
 	input.OnSubmitted = func(_ string) {
 		loginDialog.Hide()
-		dismiss()
+		showCursor(w) // dialog dismissing hid it
 		tryUnlock()
 	}
 
@@ -63,6 +63,7 @@ func showLogin(unlocked func(), w fyne.Window) {
 		func(ok bool) {
 			dismiss()
 			if !ok {
+				hideCursor(w)
 				return
 			}
 

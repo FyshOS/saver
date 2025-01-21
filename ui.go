@@ -184,7 +184,11 @@ func clockText(t *canvas.Text, format string) {
 }
 
 func (s *ScreenSaver) startedInput(w fyne.Window) {
-	if !s.Lock || s.started.After(time.Now().Add(time.Second*-2)) {
+	if s.started.After(time.Now().Add(time.Millisecond * -200)) {
+		return // something flickering as we start
+	}
+	if !s.Lock && s.started.After(time.Now().Add(time.Second*-3)) {
+		showCursor(w)
 		s.unlock()
 		return
 	}
