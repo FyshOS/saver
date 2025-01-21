@@ -167,7 +167,7 @@ func newFysh(size int) *canvas.Image {
 
 func formattedTime(format string) string { // matching the desktop format
 	if format == "12h" {
-		return time.Now().Format("03:04pm")
+		return time.Now().Format("3:04pm")
 	}
 
 	return time.Now().Format("15:04")
