@@ -20,7 +20,11 @@ func showLogin(unlocked func(), w fyne.Window) {
 	}
 
 	showCursor(w)
-	input := widget.NewPasswordEntry()
+	input := newPasswordEscapeEntry(func() {
+		if loginDialog != nil {
+			loginDialog.Hide()
+		}
+	})
 	user, _ := user.Current()
 
 	tryUnlock := func() {
@@ -54,6 +58,14 @@ func showLogin(unlocked func(), w fyne.Window) {
 		showCursor(w) // dialog dismissing hid it
 		tryUnlock()
 	}
+	w.Canvas().SetOnTypedKey(func(ev *fyne.KeyEvent) {
+		switch ev.Name {
+		case fyne.KeyEscape:
+			if loginDialog != nil {
+				loginDialog.Hide()
+			}
+		}
+	})
 
 	loginDialog = dialog.NewForm("Enter Password", "Unlock", "Cancel",
 		[]*widget.FormItem{
@@ -75,4 +87,27 @@ func showLogin(unlocked func(), w fyne.Window) {
 		time.Sleep(time.Millisecond * 100)
 		w.Canvas().Focus(input)
 	}()
+}
+
+type passwordEscapeEntry struct {
+	widget.Entry
+
+	esc func()
+}
+
+func newPasswordEscapeEntry(fn func()) *passwordEscapeEntry {
+	p := &passwordEscapeEntry{esc: fn}
+	p.ExtendBaseWidget(p)
+
+	p.Password = true
+	return p
+}
+
+func (p *passwordEscapeEntry) TypedKey(ev *fyne.KeyEvent) {
+	if ev.Name == fyne.KeyEscape {
+		p.esc()
+		return
+	}
+
+	p.Entry.TypedKey(ev)
 }
