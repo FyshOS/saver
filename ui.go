@@ -50,7 +50,9 @@ func (s *ScreenSaver) showClock() bool {
 
 func (s *ScreenSaver) ShowWindow() {
 	w := fyne.CurrentApp().NewWindow("Screensaver")
+	w.SetPadded(false)
 	w.Resize(fyne.NewSize(500, 350))
+	w.SetFullScreen(true)
 
 	w.SetContent(s.MakeUI(w))
 	w.Canvas().SetOnTypedRune(func(r rune) {
@@ -60,8 +62,6 @@ func (s *ScreenSaver) ShowWindow() {
 		s.startedInput(w)
 	})
 
-	w.SetPadded(false)
-	w.SetFullScreen(true)
 	s.win = w
 	w.Show()
 }
@@ -113,7 +113,7 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 	go l6.run()
 
 	go func() {
-		time.Sleep(time.Millisecond * 330)
+		time.Sleep(time.Millisecond * 250)
 		hideCursor(w)
 	}()
 
