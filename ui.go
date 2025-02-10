@@ -98,6 +98,7 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 
 	txt := canvas.NewText(s.Label, theme.Color(theme.ColorNameForeground))
 	if s.showClock() {
+		txt.Text = formattedTime(s.ClockFormat)
 		go clockText(txt, s.ClockFormat)
 	}
 
@@ -151,8 +152,10 @@ func newFysh(size int) *canvas.Image {
 
 	go func() {
 		for {
-			ico.Image = fyshes[id]
-			ico.Refresh()
+			fyne.Do(func() {
+				ico.Image = fyshes[id]
+				ico.Refresh()
+			})
 
 			id++
 			if id >= 5 {
@@ -175,11 +178,13 @@ func formattedTime(format string) string { // matching the desktop format
 
 func clockText(t *canvas.Text, format string) {
 	for {
-		txt := formattedTime(format)
-		t.Text = txt
-		t.Resize(t.MinSize())
-
 		time.Sleep(time.Second * 10) // don't refresh too fast but don't lag more than 10 sec
+
+		txt := formattedTime(format)
+		fyne.Do(func() {
+			t.Text = txt
+			t.Resize(t.MinSize())
+		})
 	}
 }
 
