@@ -3,7 +3,7 @@ module github.com/FyshOS/saver
 go 1.19
 
 require (
-	fyne.io/fyne/v2 v2.6.0-alpha1.0.20250210195711-2ba364149b76
+	fyne.io/fyne/v2 v2.6.1
 	github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 )

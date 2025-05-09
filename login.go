@@ -85,7 +85,9 @@ func showLogin(unlocked func(), w fyne.Window) {
 	loginDialog.Show()
 	go func() {
 		time.Sleep(time.Millisecond * 100)
-		w.Canvas().Focus(input)
+		fyne.Do(func() {
+			w.Canvas().Focus(input)
+		})
 	}()
 }
 
