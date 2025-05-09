@@ -2,6 +2,7 @@ package saver
 
 import (
 	"image/color"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -30,17 +31,23 @@ type cursorCapture struct {
 	widget.BaseWidget
 
 	moved func()
+	since time.Time
 }
 
 func (c *cursorCapture) CreateRenderer() fyne.WidgetRenderer {
+	c.since = time.Now()
 	return widget.NewSimpleRenderer(canvas.NewRectangle(color.Transparent))
 }
 
-func (c *cursorCapture) MouseIn(ev *desktop.MouseEvent) {
+func (c *cursorCapture) MouseIn(_ *desktop.MouseEvent) {
 
 }
 
-func (c *cursorCapture) MouseMoved(ev *desktop.MouseEvent) {
+func (c *cursorCapture) MouseMoved(_ *desktop.MouseEvent) {
+	if time.Now().Sub(c.since) < time.Second {
+		return
+	}
+
 	c.moved()
 }
 
