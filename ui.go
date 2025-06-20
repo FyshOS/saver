@@ -5,13 +5,19 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"log"
 	"time"
 
+	"github.com/BurntSushi/xgb"
+	"github.com/BurntSushi/xgb/xproto"
+	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/nfnt/resize"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 )
 
@@ -34,7 +40,7 @@ type ScreenSaver struct {
 
 	OnUnlocked func()
 	started    time.Time
-	win        fyne.Window
+	wins       []fyne.Window
 }
 
 func NewScreenSaver(onUnlocked func()) *ScreenSaver {
@@ -48,13 +54,12 @@ func (s *ScreenSaver) showClock() bool {
 	return s.Label == clockLabelKey
 }
 
-func (s *ScreenSaver) ShowWindow() {
-	w := fyne.CurrentApp().NewWindow("Screensaver")
+func (s *ScreenSaver) makeWindow(content func(fyne.Window) fyne.CanvasObject) fyne.Window {
+	w := fyne.CurrentApp().Driver().(desktop.Driver).CreateSplashWindow()
 	w.SetPadded(false)
 	w.Resize(fyne.NewSize(500, 350))
-	w.SetFullScreen(true)
 
-	w.SetContent(s.MakeUI(w))
+	w.SetContent(content(w))
 	w.Canvas().SetOnTypedRune(func(r rune) {
 		s.startedInput(w)
 	})
@@ -62,8 +67,71 @@ func (s *ScreenSaver) ShowWindow() {
 		s.startedInput(w)
 	})
 
-	s.win = w
+	return w
+}
+
+func (s *ScreenSaver) ShowWindow() {
+	w := s.makeWindow(s.MakeUI)
+	go func() {
+		time.Sleep(time.Millisecond * 250)
+		hideCursor(w)
+	}()
+
+	s.wins = []fyne.Window{w}
+	w.SetFullScreen(true)
 	w.Show()
+}
+
+func (s *ScreenSaver) ShowWindows() {
+	w := s.makeWindow(s.MakeUI)
+	go func() {
+		time.Sleep(time.Millisecond * 250)
+		hideCursor(w)
+	}()
+
+	s.wins = []fyne.Window{w}
+	w.Show()
+
+	go func() {
+		conn, err := xgb.NewConn()
+		if err != nil {
+			log.Println("Failed to get X11 connection", err)
+			return
+		}
+
+		screens := glfw.GetMonitors()
+		for i, scr := range screens {
+			if i > 0 {
+				// a horrible hack until we track down the concurrent window configure deadlock
+				time.Sleep(time.Millisecond * 500)
+
+				w2 := fyne.CurrentApp().Driver().(desktop.Driver).CreateSplashWindow()
+				w2.SetContent(s.MakeUI(w2))
+
+				w2.Show()
+				w = w2
+				s.wins = append(s.wins, w2)
+			}
+
+			w.(driver.NativeWindow).RunNative(func(ctx any) {
+				xWin := ctx.(driver.X11WindowContext).WindowHandle
+				mode := scr.GetVideoMode()
+
+				x, y := scr.GetPos()
+				go func() {
+					for i := 0; i < 10; i++ {
+
+						fyne.Do(func() {
+							_ = xproto.ConfigureWindow(conn, xproto.Window(xWin), xproto.ConfigWindowX|xproto.ConfigWindowY|xproto.ConfigWindowWidth|xproto.ConfigWindowHeight,
+								[]uint32{uint32(x - 1), uint32(y - 1), uint32(mode.Width + 2), uint32(mode.Height + 2)})
+						})
+						time.Sleep(time.Millisecond * 50)
+					}
+				}()
+			})
+
+		}
+	}()
 }
 
 func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
@@ -113,11 +181,6 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 	go l5.run()
 	go l6.run()
 
-	go func() {
-		time.Sleep(time.Millisecond * 250)
-		hideCursor(w)
-	}()
-
 	return container.NewStack(
 		&cursorCapture{moved: func() {
 			s.startedInput(w)
@@ -131,8 +194,10 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 }
 
 func (s *ScreenSaver) unlock() {
-	if s.win != nil {
-		s.win.Close()
+	for _, w := range s.wins {
+		if w != nil {
+			w.Close()
+		}
 	}
 	if fn := s.OnUnlocked; fn != nil {
 		fn()

@@ -20,6 +20,6 @@ func main() {
 	s.Label = *label
 	s.Lock = *lock
 
-	s.ShowWindow()
+	s.ShowWindows()
 	a.Run()
 }
