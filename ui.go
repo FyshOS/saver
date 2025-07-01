@@ -242,14 +242,18 @@ func formattedTime(format string) string { // matching the desktop format
 }
 
 func clockText(t *canvas.Text, format string) {
+	oldTime := ""
 	for {
-		time.Sleep(time.Second * 10) // don't refresh too fast but don't lag more than 10 sec
+		time.Sleep(time.Second)
 
 		txt := formattedTime(format)
-		fyne.Do(func() {
-			t.Text = txt
-			t.Resize(t.MinSize())
-		})
+		if txt != oldTime {
+			oldTime = txt
+			fyne.DoAndWait(func() {
+				t.Text = txt
+				t.Resize(t.MinSize())
+			})
+		}
 	}
 }
 
