@@ -12,6 +12,7 @@ func main() {
 	a := app.NewWithID("com.fyshos.fyshsaver")
 
 	lock := flag.Bool("lock", false, "Lock the screen")
+	delay := flag.Bool("lock-delay", false, "Delay the screen lock (by 3 sec)")
 	label := flag.String("label", "(clock)", "Label to display")
 	flag.Parse()
 
@@ -19,7 +20,7 @@ func main() {
 	s.ClockFormat = a.Preferences().StringWithFallback("clockformatting", "12h")
 	s.Label = *label
 	s.Lock = *lock
-	s.LockImmediately = true // when using CLI always be immediate
+	s.LockImmediately = !*delay // when using CLI default to immediate lock
 
 	s.ShowWindows()
 	a.Run()
