@@ -34,9 +34,9 @@ var (
 )
 
 type ScreenSaver struct {
-	Label       string
-	Lock        bool
-	ClockFormat string
+	Label                 string
+	Lock, LockImmediately bool
+	ClockFormat           string
 
 	OnUnlocked func()
 	started    time.Time
@@ -261,7 +261,7 @@ func (s *ScreenSaver) startedInput(w fyne.Window) {
 	if s.started.After(time.Now().Add(time.Millisecond * -200)) {
 		return // something flickering as we start
 	}
-	if !s.Lock || s.started.After(time.Now().Add(time.Second*-3)) {
+	if !s.Lock || (!s.LockImmediately && s.started.After(time.Now().Add(time.Second*-3))) {
 		showCursor(w)
 		s.unlock()
 		return

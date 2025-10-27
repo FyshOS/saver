@@ -19,6 +19,7 @@ func main() {
 	s.ClockFormat = a.Preferences().StringWithFallback("clockformatting", "12h")
 	s.Label = *label
 	s.Lock = *lock
+	s.LockImmediately = true // when using CLI always be immediate
 
 	s.ShowWindows()
 	a.Run()
