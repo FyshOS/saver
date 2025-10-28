@@ -36,17 +36,24 @@ func showLogin(unlocked func(), w fyne.Window) {
 
 		spin.Start()
 		d.Show()
-		defer func() {
-			d.Hide()
-			spin.Stop()
+
+		go func() {
+			defer func() {
+				fyne.Do(func() {
+					d.Hide()
+					spin.Stop()
+				})
+			}()
+
+			if !canUnlock(user.Username, input.Text) {
+				fyne.Do(func() {
+					hideCursor(w)
+				})
+				return
+			}
+
+			fyne.Do(unlocked)
 		}()
-
-		if !canUnlock(user.Username, input.Text) {
-			hideCursor(w)
-			return
-		}
-
-		unlocked()
 	}
 	dismiss := func() {
 		w.Canvas().Focus(nil)
