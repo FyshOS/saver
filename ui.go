@@ -10,7 +10,6 @@ import (
 
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"
-	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/nfnt/resize"
 
 	"fyne.io/fyne/v2"
@@ -55,7 +54,13 @@ func (s *ScreenSaver) showClock() bool {
 }
 
 func (s *ScreenSaver) makeWindow(content func(fyne.Window) fyne.CanvasObject) fyne.Window {
-	w := fyne.CurrentApp().Driver().(desktop.Driver).CreateSplashWindow()
+	var w fyne.Window
+	if desk, ok := fyne.CurrentApp().Driver().(desktop.Driver); ok {
+		w = desk.CreateSplashWindow()
+	} else { // web or mobile
+		w = fyne.CurrentApp().NewWindow("")
+	}
+
 	w.SetPadded(false)
 	w.Resize(fyne.NewSize(500, 350))
 
@@ -99,13 +104,18 @@ func (s *ScreenSaver) ShowWindows() {
 			return
 		}
 
-		screens := glfw.GetMonitors()
+		screens := getMonitors()
 		for i, scr := range screens {
 			if i > 0 {
 				// a horrible hack until we track down the concurrent window configure deadlock
 				time.Sleep(time.Millisecond * 500)
 
-				w2 := fyne.CurrentApp().Driver().(desktop.Driver).CreateSplashWindow()
+				var w2 fyne.Window
+				if desk, ok := fyne.CurrentApp().Driver().(desktop.Driver); ok {
+					w2 = desk.CreateSplashWindow()
+				} else { // web or mobile
+					w2 = fyne.CurrentApp().NewWindow("")
+				}
 				w2.SetContent(s.MakeUI(w2))
 
 				w2.Show()
