@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !linux && !openbsd && !freebsd && !netbsd && !darwin
 
 package saver
 
