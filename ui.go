@@ -159,10 +159,10 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 
 	ico2 := newFysh(96)
 	ico2.Move(fyne.NewPos(400, 100))
-	l2 := &moveLayout{xInc: 2.2, yInc: 2.2, invertX: true}
+	l2 := &moveLayout{xInc: 1.75, yInc: 1.75, invertX: true}
 
 	ico3 := newFysh(96)
-	l3 := &moveLayout{xInc: 1.5, yInc: 1.5}
+	l3 := &moveLayout{xInc: 2.25, yInc: 2.25}
 	ico3.Move(fyne.NewPos(220, 310))
 	l3.invertY = true
 
@@ -171,7 +171,7 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 	ico4.Move(fyne.NewPos(450, 200))
 
 	ico5 := newFysh(128)
-	l5 := &moveLayout{xInc: 1, yInc: 1, invertY: true}
+	l5 := &moveLayout{xInc: 1.25, yInc: 1.25, invertY: true}
 	ico5.Move(fyne.NewPos(150, 300))
 
 	txt := canvas.NewText(s.Label, theme.Color(theme.ColorNameForeground))
@@ -182,7 +182,7 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 
 	txt.TextSize = 84
 	txt.Resize(txt.MinSize())
-	l6 := &moveLayout{xInc: 1, yInc: 1}
+	l6 := &moveLayout{xInc: 1.5, yInc: 1}
 
 	go l1.run()
 	go l2.run()
