@@ -14,9 +14,9 @@ import (
 
 var loginDialog dialog.Dialog
 
-func showLogin(unlocked func(), w fyne.Window) {
+func showLogin(unlocked func(), w fyne.Window) error {
 	if loginDialog != nil {
-		return
+		return nil
 	}
 
 	showCursor(w)
@@ -25,7 +25,10 @@ func showLogin(unlocked func(), w fyne.Window) {
 			loginDialog.Hide()
 		}
 	})
-	user, _ := user.Current()
+	user, err := user.Current()
+	if err != nil {
+		return err
+	}
 
 	tryUnlock := func() {
 		spin := widget.NewActivity()
@@ -96,6 +99,7 @@ func showLogin(unlocked func(), w fyne.Window) {
 			w.Canvas().Focus(input)
 		})
 	}()
+	return nil
 }
 
 type passwordEscapeEntry struct {

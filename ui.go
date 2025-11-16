@@ -277,7 +277,12 @@ func (s *ScreenSaver) startedInput(w fyne.Window) {
 		return
 	}
 
-	showLogin(s.unlock, w)
+	err := showLogin(s.unlock, w)
+	if err != nil {
+		fyne.LogError("failed to prepare login screen", err)
+		showCursor(w)
+		s.unlock()
+	}
 }
 
 type moveLayout struct {
