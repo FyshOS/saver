@@ -191,6 +191,12 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 	go l5.run()
 	go l6.run()
 
+	w.Canvas().SetOnTypedRune(func(_ rune) {
+		s.startedInput(w)
+	})
+	w.Canvas().SetOnTypedKey(func(_ *fyne.KeyEvent) {
+		s.startedInput(w)
+	})
 	return container.NewStack(
 		&cursorCapture{moved: func() {
 			s.startedInput(w)
