@@ -8,16 +8,16 @@ import (
 	"log"
 	"time"
 
-	"github.com/BurntSushi/xgb"
-	"github.com/BurntSushi/xgb/xproto"
-	"github.com/nfnt/resize"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
+
+	"github.com/BurntSushi/xgb"
+	"github.com/BurntSushi/xgb/xproto"
+	"github.com/nfnt/resize"
 )
 
 const (
@@ -36,6 +36,8 @@ type ScreenSaver struct {
 	Label                 string
 	Lock, LockImmediately bool
 	ClockFormat           string
+
+	ui CustomUI
 
 	OnUnlocked func()
 	started    time.Time
@@ -144,7 +146,11 @@ func (s *ScreenSaver) ShowWindows() {
 	}()
 }
 
-func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
+type defaultSaverUI struct {
+	quit func()
+}
+
+func (d *defaultSaverUI) MakeUI(s *ScreenSaver) fyne.CanvasObject {
 	for i := 0; i < frameCount; i++ {
 		name := fmt.Sprintf("fysh%d.png", i)
 		frame, _ := frames.Open("frames/" + name)
@@ -191,22 +197,50 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 	go l5.run()
 	go l6.run()
 
-	w.Canvas().SetOnTypedRune(func(_ rune) {
-		s.startedInput(w)
-	})
-	w.Canvas().SetOnTypedKey(func(_ *fyne.KeyEvent) {
-		s.startedInput(w)
-	})
+	d.quit = func() {
+		l1.stop()
+		l2.stop()
+		l3.stop()
+		l4.stop()
+		l5.stop()
+		l6.stop()
+	}
+
 	return container.NewStack(
-		&cursorCapture{moved: func() {
-			s.startedInput(w)
-		}},
 		container.New(l6, txt),
 		container.New(l5, ico5),
 		container.New(l4, ico4),
 		container.New(l3, ico3),
 		container.New(l2, ico2),
 		container.New(l1, ico1))
+}
+
+func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
+	if s.ui == nil {
+		s.ui = &defaultSaverUI{}
+	}
+	w.Canvas().SetOnTypedRune(func(_ rune) {
+		s.startedInput(w)
+	})
+	w.Canvas().SetOnTypedKey(func(_ *fyne.KeyEvent) {
+		s.startedInput(w)
+	})
+	ui := s.ui.MakeUI(s)
+	w.SetOnClosed(s.ui.DestroyUI)
+
+	return container.NewStack(
+		&cursorCapture{moved: func() {
+			s.startedInput(w)
+		}},
+		ui)
+}
+
+func (d *defaultSaverUI) DestroyUI() {
+	if d.quit == nil {
+		return
+	}
+
+	d.quit()
 }
 
 func (s *ScreenSaver) unlock() {
@@ -294,6 +328,7 @@ func (s *ScreenSaver) startedInput(w fyne.Window) {
 type moveLayout struct {
 	size fyne.Size
 	objs []fyne.CanvasObject
+	quit chan struct{}
 
 	invertX, invertY bool
 	xInc, yInc       float32
@@ -345,12 +380,23 @@ func (m *moveLayout) move() {
 }
 
 func (m *moveLayout) run() {
+	m.quit = make(chan struct{})
 	for {
-		time.Sleep(time.Second / 60) // TODO use animation
+		select {
+		case <-m.quit:
+			return
+		default:
+			time.Sleep(time.Second / 60) // TODO use animation
 
-		if len(m.objs) == 0 || m.size.Width == 0 {
-			continue
+			if len(m.objs) == 0 || m.size.Width == 0 {
+				continue
+			}
+			m.move()
 		}
-		m.move()
 	}
+}
+
+func (m *moveLayout) stop() {
+	close(m.quit)
+	m.quit = nil
 }
