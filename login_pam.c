@@ -1,4 +1,4 @@
-//go:build unix
+//go:build unix && !openbsd
 
 // The code in this file is from the excellent blog post https://www.gulshansingh.com/posts/how-to-write-a-display-manager/
 
