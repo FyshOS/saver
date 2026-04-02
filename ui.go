@@ -21,6 +21,8 @@ import (
 )
 
 const (
+	WindowTitle = "fyshsaver"
+
 	clockLabelKey = "(clock)"
 	frameCount    = 5
 )
@@ -62,6 +64,7 @@ func (s *ScreenSaver) makeWindow(content func(fyne.Window) fyne.CanvasObject) fy
 	} else { // web or mobile
 		w = fyne.CurrentApp().NewWindow("")
 	}
+	w.SetTitle(WindowTitle)
 
 	w.SetPadded(false)
 	w.Resize(fyne.NewSize(500, 350))
@@ -118,6 +121,7 @@ func (s *ScreenSaver) ShowWindows() {
 				} else { // web or mobile
 					w2 = fyne.CurrentApp().NewWindow("")
 				}
+				w.SetTitle(WindowTitle)
 				w2.SetContent(s.MakeUI(w2))
 
 				w2.Show()
