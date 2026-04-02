@@ -385,12 +385,22 @@ func (m *moveLayout) move() {
 
 func (m *moveLayout) run() {
 	m.quit = make(chan struct{})
+	lastFrame := time.Now()
 	for {
 		select {
 		case <-m.quit:
 			return
 		default:
 			time.Sleep(time.Second / 60) // TODO use animation
+
+			now := time.Now()
+			delta := now.Sub(lastFrame)
+			lastFrame = now
+
+			// Skip frame if too much time has passed (e.g. after hibernate/resume)
+			if delta > time.Second {
+				continue
+			}
 
 			if len(m.objs) == 0 || m.size.Width == 0 {
 				continue
