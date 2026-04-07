@@ -121,7 +121,7 @@ func (s *ScreenSaver) ShowWindows() {
 				} else { // web or mobile
 					w2 = fyne.CurrentApp().NewWindow("")
 				}
-				w.SetTitle(WindowTitle)
+				w2.SetTitle(WindowTitle)
 				w2.SetContent(s.MakeUI(w2))
 
 				w2.Show()
