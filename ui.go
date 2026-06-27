@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/png"
 	"log"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -43,7 +44,10 @@ type ScreenSaver struct {
 
 	OnUnlocked func()
 	started    time.Time
-	wins       []fyne.Window
+
+	winMu  sync.Mutex
+	wins   []fyne.Window
+	loaded bool
 }
 
 func NewScreenSaver(onUnlocked func()) *ScreenSaver {
@@ -57,7 +61,7 @@ func (s *ScreenSaver) showClock() bool {
 	return s.Label == clockLabelKey
 }
 
-func (s *ScreenSaver) makeWindow(content func(fyne.Window) fyne.CanvasObject) fyne.Window {
+func (s *ScreenSaver) makeWindow() fyne.Window {
 	var w fyne.Window
 	if desk, ok := fyne.CurrentApp().Driver().(desktop.Driver); ok {
 		w = desk.CreateSplashWindow()
@@ -68,8 +72,8 @@ func (s *ScreenSaver) makeWindow(content func(fyne.Window) fyne.CanvasObject) fy
 
 	w.SetPadded(false)
 	w.Resize(fyne.NewSize(500, 350))
+	w.SetContent(container.NewWithoutLayout())
 
-	w.SetContent(content(w))
 	w.Canvas().SetOnTypedRune(func(r rune) {
 		s.startedInput(w)
 	})
@@ -80,26 +84,54 @@ func (s *ScreenSaver) makeWindow(content func(fyne.Window) fyne.CanvasObject) fy
 	return w
 }
 
+func (s *ScreenSaver) registerWindow(w fyne.Window) {
+	s.winMu.Lock()
+	s.wins = append(s.wins, w)
+	loaded := s.loaded
+	s.winMu.Unlock()
+
+	if loaded {
+		w.SetContent(s.MakeUI(w))
+	}
+}
+
+func (s *ScreenSaver) loadContent() {
+	s.winMu.Lock()
+	if s.loaded {
+		s.winMu.Unlock()
+		return
+	}
+	s.loaded = true
+	wins := append([]fyne.Window(nil), s.wins...)
+	s.winMu.Unlock()
+
+	for _, w := range wins {
+		w.SetContent(s.MakeUI(w))
+	}
+}
+
 func (s *ScreenSaver) ShowWindow() {
-	w := s.makeWindow(s.MakeUI)
+	w := s.makeWindow()
 	go func() {
 		time.Sleep(time.Millisecond * 250)
 		hideCursor(w)
 	}()
 
-	s.wins = []fyne.Window{w}
+	fyne.CurrentApp().Lifecycle().SetOnEnteredForeground(s.loadContent)
+	s.registerWindow(w)
 	w.SetFullScreen(true)
 	w.Show()
 }
 
 func (s *ScreenSaver) ShowWindows() {
-	w := s.makeWindow(s.MakeUI)
+	w := s.makeWindow()
 	go func() {
 		time.Sleep(time.Millisecond * 250)
 		hideCursor(w)
 	}()
 
-	s.wins = []fyne.Window{w}
+	fyne.CurrentApp().Lifecycle().SetOnEnteredForeground(s.loadContent)
+	s.registerWindow(w)
 	w.Show()
 
 	go func() {
@@ -115,18 +147,10 @@ func (s *ScreenSaver) ShowWindows() {
 				// a horrible hack until we track down the concurrent window configure deadlock
 				time.Sleep(time.Millisecond * 500)
 
-				var w2 fyne.Window
-				if desk, ok := fyne.CurrentApp().Driver().(desktop.Driver); ok {
-					w2 = desk.CreateSplashWindow()
-				} else { // web or mobile
-					w2 = fyne.CurrentApp().NewWindow("")
-				}
-				w2.SetTitle(WindowTitle)
-				w2.SetContent(s.MakeUI(w2))
-
+				w2 := s.makeWindow()
 				w2.Show()
 				w = w2
-				s.wins = append(s.wins, w2)
+				s.registerWindow(w2)
 			}
 
 			w.(driver.NativeWindow).RunNative(func(ctx any) {
@@ -248,7 +272,10 @@ func (d *defaultSaverUI) DestroyUI() {
 }
 
 func (s *ScreenSaver) unlock() {
-	for _, w := range s.wins {
+	s.winMu.Lock()
+	wins := append([]fyne.Window(nil), s.wins...)
+	s.winMu.Unlock()
+	for _, w := range wins {
 		if w != nil {
 			w.Close()
 		}
