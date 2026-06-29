@@ -2,7 +2,7 @@
 
 package saver
 
-import "github.com/go-gl/glfw/v3.3/glfw"
+import "github.com/go-gl/glfw/v3.4/glfw"
 
 func getMonitors() []*glfw.Monitor {
 	return glfw.GetMonitors()
