@@ -88,6 +88,44 @@ static int conv(int num_msg, const struct pam_message **msg,
     return result;
 }
 
+#define FPRINT_SERVICE_NAME "display_manager-fingerprint"
+
+// fconv is a conversation function for fingerprint authentication. pam_fprintd
+// only emits informational messages ("Swipe your finger...") and needs no input
+// from us, so we accept every message and return empty responses.
+static int fconv(int num_msg, const struct pam_message **msg,
+        struct pam_response **resp, void *appdata_ptr) {
+    (void)msg;
+    (void)appdata_ptr;
+    *resp = calloc(num_msg, sizeof(struct pam_response));
+    if (*resp == NULL) {
+        return PAM_BUF_ERR;
+    }
+    return PAM_SUCCESS;
+}
+
+// canUnlockFingerprint blocks on a single fingerprint verification via the
+// display_manager-fingerprint PAM service (pam_fprintd) and returns true on a
+// matching finger. It uses a private pam handle so it can run concurrently with
+// canUnlock's password check, and fails fast (returns false) when fingerprint
+// login is not configured.
+bool canUnlockFingerprint(const char *username) {
+    struct pam_conv pam_conv = { fconv, NULL };
+    pam_handle_t *handle = NULL;
+
+    int result = pam_start(FPRINT_SERVICE_NAME, username, &pam_conv, &handle);
+    if (result != PAM_SUCCESS) {
+        if (handle != NULL) {
+            pam_end(handle, result);
+        }
+        return false;
+    }
+
+    result = pam_authenticate(handle, 0);
+    pam_end(handle, result);
+    return result == PAM_SUCCESS;
+}
+
 bool canUnlock(const char *username, const char *password) {
     const char *data[2] = {username, password};
     struct pam_conv pam_conv = {

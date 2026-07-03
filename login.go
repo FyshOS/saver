@@ -30,6 +30,9 @@ func showLogin(unlocked func(), w fyne.Window) error {
 		return err
 	}
 
+	// stopFP halts the background fingerprint listener.
+	stopFP := func() {}
+
 	tryUnlock := func() {
 		spin := widget.NewActivity()
 		prop := canvas.NewRectangle(color.Transparent)
@@ -55,10 +58,14 @@ func showLogin(unlocked func(), w fyne.Window) error {
 				return
 			}
 
-			fyne.Do(unlocked)
+			fyne.Do(func() {
+				stopFP()
+				unlocked()
+			})
 		}()
 	}
 	dismiss := func() {
+		stopFP()
 		w.Canvas().Focus(nil)
 		loginDialog = nil
 	}
@@ -77,10 +84,24 @@ func showLogin(unlocked func(), w fyne.Window) error {
 		}
 	})
 
+	// Start a fingerprint matching process, on a match we tear down
+	// the prompt and unlock exactly as a correct password would.
+	stopFP = startFingerprintUnlock(user.Username, func() {
+		fyne.Do(func() {
+			if loginDialog != nil {
+				loginDialog.Hide()
+			}
+			dismiss()
+			unlocked()
+		})
+	})
+
+	passwordItem := widget.NewFormItem("Password", input)
+	passwordItem.HintText = "…or tap your password sensor"
 	loginDialog = dialog.NewForm("Enter Password", "Unlock", "Cancel",
 		[]*widget.FormItem{
 			widget.NewFormItem("Username", widget.NewLabel(user.Username)),
-			widget.NewFormItem("Password", input),
+			passwordItem,
 		},
 		func(ok bool) {
 			dismiss()
