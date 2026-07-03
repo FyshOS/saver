@@ -40,7 +40,6 @@ func (c *cursorCapture) CreateRenderer() fyne.WidgetRenderer {
 }
 
 func (c *cursorCapture) MouseIn(_ *desktop.MouseEvent) {
-
 }
 
 func (c *cursorCapture) MouseMoved(_ *desktop.MouseEvent) {
@@ -52,5 +51,4 @@ func (c *cursorCapture) MouseMoved(_ *desktop.MouseEvent) {
 }
 
 func (c *cursorCapture) MouseOut() {
-
 }

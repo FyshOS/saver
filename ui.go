@@ -240,7 +240,8 @@ func (d *defaultSaverUI) MakeUI(s *ScreenSaver) fyne.CanvasObject {
 		container.New(l4, ico4),
 		container.New(l3, ico3),
 		container.New(l2, ico2),
-		container.New(l1, ico1))
+		container.New(l1, ico1),
+	)
 }
 
 func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
@@ -260,7 +261,8 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 		&cursorCapture{moved: func() {
 			s.startedInput(w)
 		}},
-		ui)
+		ui,
+	)
 }
 
 func (d *defaultSaverUI) DestroyUI() {
