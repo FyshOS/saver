@@ -92,6 +92,7 @@ func showLogin(unlocked func(), w fyne.Window) error {
 				loginDialog.Hide()
 			}
 			dismiss()
+			showCursor(w) // dialog dismissing hid it
 			unlocked()
 		})
 	})

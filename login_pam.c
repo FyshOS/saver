@@ -122,6 +122,15 @@ bool canUnlockFingerprint(const char *username) {
     }
 
     result = pam_authenticate(handle, 0);
+
+    // Log distinct failure reasons.
+    static int last_logged = PAM_SUCCESS;
+    if (result != PAM_SUCCESS && result != last_logged) {
+        fprintf(stderr, "fingerprint: pam_authenticate: %s (%d)\n",
+                pam_strerror(handle, result), result);
+    }
+    last_logged = result;
+
     pam_end(handle, result);
     return result == PAM_SUCCESS;
 }
