@@ -48,6 +48,28 @@ type ScreenSaver struct {
 	winMu  sync.Mutex
 	wins   []fyne.Window
 	loaded bool
+
+	suspendStop func()
+}
+
+// startSuspendWatch begins listening for system suspend/resume so that the
+// custom UI can pause its animations while asleep. It is safe to call more than
+// once; only the first call takes effect.
+func (s *ScreenSaver) startSuspendWatch() {
+	if s.suspendStop != nil {
+		return
+	}
+
+	s.suspendStop = watchSuspend(func(sleeping bool) {
+		if s.ui == nil {
+			return
+		}
+		if sleeping {
+			s.ui.Stop()
+		} else {
+			s.ui.Start()
+		}
+	})
 }
 
 func NewScreenSaver(onUnlocked func()) *ScreenSaver {
@@ -92,6 +114,7 @@ func (s *ScreenSaver) registerWindow(w fyne.Window) {
 
 	if loaded {
 		w.SetContent(s.MakeUI(w))
+		go fyne.Do(s.ui.Start) // don't delay show
 	}
 }
 
@@ -107,6 +130,7 @@ func (s *ScreenSaver) loadContent() {
 
 	for _, w := range wins {
 		w.SetContent(s.MakeUI(w))
+		go fyne.Do(s.ui.Start) // don't delay show
 	}
 }
 
@@ -121,6 +145,8 @@ func (s *ScreenSaver) ShowWindow() {
 	s.registerWindow(w)
 	w.SetFullScreen(true)
 	w.Show()
+
+	s.startSuspendWatch()
 }
 
 func (s *ScreenSaver) ShowWindows() {
@@ -133,6 +159,8 @@ func (s *ScreenSaver) ShowWindows() {
 	fyne.CurrentApp().Lifecycle().SetOnEnteredForeground(s.loadContent)
 	s.registerWindow(w)
 	w.Show()
+
+	s.startSuspendWatch()
 
 	go func() {
 		conn, err := xgb.NewConn()
@@ -175,10 +203,13 @@ func (s *ScreenSaver) ShowWindows() {
 }
 
 type defaultSaverUI struct {
-	quit func()
+	quit  func()
+	pause *pauser
 }
 
 func (d *defaultSaverUI) MakeUI(s *ScreenSaver) fyne.CanvasObject {
+	d.pause = newPauser()
+
 	for i := 0; i < frameCount; i++ {
 		name := fmt.Sprintf("fysh%d.png", i)
 		frame, _ := frames.Open("frames/" + name)
@@ -188,35 +219,35 @@ func (d *defaultSaverUI) MakeUI(s *ScreenSaver) fyne.CanvasObject {
 		_ = frame.Close()
 	}
 
-	ico1 := newFysh(96)
-	l1 := &moveLayout{xInc: 2, yInc: 2}
+	ico1 := newFysh(96, d.pause)
+	l1 := &moveLayout{xInc: 2, yInc: 2, pause: d.pause}
 
-	ico2 := newFysh(96)
+	ico2 := newFysh(96, d.pause)
 	ico2.Move(fyne.NewPos(400, 100))
-	l2 := &moveLayout{xInc: 1.75, yInc: 1.75, invertX: true}
+	l2 := &moveLayout{xInc: 1.75, yInc: 1.75, invertX: true, pause: d.pause}
 
-	ico3 := newFysh(96)
-	l3 := &moveLayout{xInc: 2.25, yInc: 2.25}
+	ico3 := newFysh(96, d.pause)
+	l3 := &moveLayout{xInc: 2.25, yInc: 2.25, pause: d.pause}
 	ico3.Move(fyne.NewPos(220, 310))
 	l3.invertY = true
 
-	ico4 := newFysh(128)
-	l4 := &moveLayout{xInc: 1, yInc: 1, invertX: true}
+	ico4 := newFysh(128, d.pause)
+	l4 := &moveLayout{xInc: 1, yInc: 1, invertX: true, pause: d.pause}
 	ico4.Move(fyne.NewPos(450, 200))
 
-	ico5 := newFysh(128)
-	l5 := &moveLayout{xInc: 1.25, yInc: 1.25, invertY: true}
+	ico5 := newFysh(128, d.pause)
+	l5 := &moveLayout{xInc: 1.25, yInc: 1.25, invertY: true, pause: d.pause}
 	ico5.Move(fyne.NewPos(150, 300))
 
 	txt := canvas.NewText(s.Label, theme.Color(theme.ColorNameForeground))
 	if s.showClock() {
 		txt.Text = formattedTime(s.ClockFormat)
-		go clockText(txt, s.ClockFormat)
+		go clockText(txt, s.ClockFormat, d.pause)
 	}
 
 	txt.TextSize = 84
 	txt.Resize(txt.MinSize())
-	l6 := &moveLayout{xInc: 1.5, yInc: 1}
+	l6 := &moveLayout{xInc: 1.5, yInc: 1, pause: d.pause}
 
 	go l1.run()
 	go l2.run()
@@ -266,6 +297,9 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 }
 
 func (d *defaultSaverUI) DestroyUI() {
+	if d.pause != nil {
+		d.pause.setPaused(false) // release any paused goroutines so they can exit
+	}
 	if d.quit == nil {
 		return
 	}
@@ -273,7 +307,28 @@ func (d *defaultSaverUI) DestroyUI() {
 	d.quit()
 }
 
+// Stop implements CustomUI: it pauses the animation goroutines while the system
+// is asleep so they do not queue canvas updates that would all run at once on
+// resume.
+func (d *defaultSaverUI) Stop() {
+	if d.pause != nil {
+		d.pause.setPaused(true)
+	}
+}
+
+// Start implements CustomUI, restarting the animations after wake.
+func (d *defaultSaverUI) Start() {
+	if d.pause != nil {
+		d.pause.setPaused(false)
+	}
+}
+
 func (s *ScreenSaver) unlock() {
+	if s.suspendStop != nil {
+		s.suspendStop()
+		s.suspendStop = nil
+	}
+
 	s.winMu.Lock()
 	wins := append([]fyne.Window(nil), s.wins...)
 	s.winMu.Unlock()
@@ -292,7 +347,7 @@ func (s *ScreenSaver) unlock() {
 
 var fyshCount = 0
 
-func newFysh(size int) *canvas.Image {
+func newFysh(size int, pause *pauser) *canvas.Image {
 	ico := &canvas.Image{}
 	ico.Resize(fyne.NewSquareSize(float32(size)))
 	id := fyshCount % 5
@@ -300,7 +355,9 @@ func newFysh(size int) *canvas.Image {
 
 	go func() {
 		for {
-			fyne.Do(func() {
+			pause.wait() // block here rather than queue updates while suspended
+
+			fyne.DoAndWait(func() {
 				ico.Image = fyshes[id]
 				ico.Refresh()
 			})
@@ -324,9 +381,10 @@ func formattedTime(format string) string { // matching the desktop format
 	return time.Now().Format("15:04")
 }
 
-func clockText(t *canvas.Text, format string) {
+func clockText(t *canvas.Text, format string, pause *pauser) {
 	oldTime := ""
 	for {
+		pause.wait()
 		time.Sleep(time.Second)
 
 		txt := formattedTime(format)
@@ -359,9 +417,10 @@ func (s *ScreenSaver) startedInput(w fyne.Window) {
 }
 
 type moveLayout struct {
-	size fyne.Size
-	objs []fyne.CanvasObject
-	quit chan struct{}
+	size  fyne.Size
+	objs  []fyne.CanvasObject
+	quit  chan struct{}
+	pause *pauser
 
 	invertX, invertY bool
 	xInc, yInc       float32
@@ -420,6 +479,7 @@ func (m *moveLayout) run() {
 		case <-m.quit:
 			return
 		default:
+			m.pause.wait()               // block while suspended instead of queueing moves
 			time.Sleep(time.Second / 60) // TODO use animation
 
 			now := time.Now()
@@ -434,7 +494,7 @@ func (m *moveLayout) run() {
 			if len(m.objs) == 0 || m.size.Width == 0 {
 				continue
 			}
-			m.move()
+			fyne.Do(m.move)
 		}
 	}
 }
