@@ -10,6 +10,7 @@ import (
 
 func main() {
 	a := app.NewWithID("com.fyshos.fyshsaver")
+	a.Settings().SetTheme(newDarkBackgroundTheme())
 
 	lock := flag.Bool("lock", false, "Lock the screen")
 	delay := flag.Bool("lock-delay", false, "Delay the screen lock (by 3 sec)")
