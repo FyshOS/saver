@@ -16,5 +16,4 @@ type CustomUI interface {
 
 func (s *ScreenSaver) SetCustomUI(ui CustomUI) {
 	s.ui = ui
-	s.ui.Start()
 }
