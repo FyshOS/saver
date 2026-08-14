@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -26,19 +27,42 @@ const (
 
 	clockLabelKey = "(clock)"
 	frameCount    = 5
+
+	fyshFrameTime   = time.Millisecond * 800
+	animationPeriod = time.Minute
 )
 
 var (
 	//go:embed "frames"
 	frames embed.FS
 
-	fyshes [frameCount]image.Image
+	fyshes     [frameCount]image.Image
+	fyshesOnce sync.Once
 )
+
+// loadFysh decodes the frames of the swimming fysh, once however many screens
+// we are asked to fill.
+func loadFysh() {
+	fyshesOnce.Do(func() {
+		for i := 0; i < frameCount; i++ {
+			name := fmt.Sprintf("fysh%d.png", i)
+			frame, _ := frames.Open("frames/" + name)
+
+			full, _ := png.Decode(frame)
+			fyshes[i] = resize.Resize(uint(128), uint(128), full, resize.Lanczos3)
+			_ = frame.Close()
+		}
+	})
+}
 
 type ScreenSaver struct {
 	Label                 string
 	Lock, LockImmediately bool
 	ClockFormat           string
+
+	// Suspending marks that the machine is on its way to sleep as we start, so
+	// the UI begins stopped and stays that way until the system wakes.
+	Suspending bool
 
 	ui CustomUI
 
@@ -49,18 +73,21 @@ type ScreenSaver struct {
 	wins   []fyne.Window
 	loaded bool
 
+	asleep      atomic.Bool
 	suspendStop func()
 }
 
-// startSuspendWatch begins listening for system suspend/resume so that the
-// custom UI can pause its animations while asleep. It is safe to call more than
-// once; only the first call takes effect.
-func (s *ScreenSaver) startSuspendWatch() {
+// prepare records the state we are starting in and begins listening for system
+// suspend/resume, so the UI can stop its animations while asleep.
+func (s *ScreenSaver) prepare() {
+	s.asleep.Store(s.Suspending)
+
 	if s.suspendStop != nil {
 		return
 	}
 
 	s.suspendStop = watchSuspend(func(sleeping bool) {
+		s.asleep.Store(sleeping)
 		if s.ui == nil {
 			return
 		}
@@ -70,6 +97,16 @@ func (s *ScreenSaver) startSuspendWatch() {
 			s.ui.Start()
 		}
 	})
+}
+
+// startUI begins the animations, unless we are showing because the machine is
+// on its way to sleep - then they wait for the resume.
+func (s *ScreenSaver) startUI() {
+	if s.ui == nil || s.asleep.Load() {
+		return
+	}
+
+	s.ui.Start()
 }
 
 func NewScreenSaver(onUnlocked func()) *ScreenSaver {
@@ -114,7 +151,7 @@ func (s *ScreenSaver) registerWindow(w fyne.Window) {
 
 	if loaded {
 		w.SetContent(s.MakeUI(w))
-		go fyne.Do(s.ui.Start) // don't delay show
+		go fyne.Do(s.startUI) // don't delay show
 	}
 }
 
@@ -130,11 +167,13 @@ func (s *ScreenSaver) loadContent() {
 
 	for _, w := range wins {
 		w.SetContent(s.MakeUI(w))
-		go fyne.Do(s.ui.Start) // don't delay show
+		go fyne.Do(s.startUI) // don't delay show
 	}
 }
 
 func (s *ScreenSaver) ShowWindow() {
+	s.prepare()
+
 	w := s.makeWindow()
 	go func() {
 		time.Sleep(time.Millisecond * 250)
@@ -145,11 +184,11 @@ func (s *ScreenSaver) ShowWindow() {
 	s.registerWindow(w)
 	w.SetFullScreen(true)
 	w.Show()
-
-	s.startSuspendWatch()
 }
 
 func (s *ScreenSaver) ShowWindows() {
+	s.prepare()
+
 	w := s.makeWindow()
 	go func() {
 		time.Sleep(time.Millisecond * 250)
@@ -159,8 +198,6 @@ func (s *ScreenSaver) ShowWindows() {
 	fyne.CurrentApp().Lifecycle().SetOnEnteredForeground(s.loadContent)
 	s.registerWindow(w)
 	w.Show()
-
-	s.startSuspendWatch()
 
 	go func() {
 		conn, err := xgb.NewConn()
@@ -202,68 +239,98 @@ func (s *ScreenSaver) ShowWindows() {
 	}()
 }
 
+// saverScene is the animated content of one screen saver window. The saver asks
+// for one per screen and they all start and stop together.
+type saverScene struct {
+	anims []*fyne.Animation
+
+	clockLabel  *canvas.Text
+	clockFormat string
+
+	running bool
+	clock   chan struct{}
+}
+
+// start runs this scene's animations, and its clock if it has one. It is a
+// no-op if the scene is already running.
+func (s *saverScene) start() {
+	if s.running {
+		return
+	}
+	s.running = true
+
+	for _, a := range s.anims {
+		a.Start()
+	}
+	if s.clockLabel != nil {
+		s.clock = make(chan struct{})
+		go clockText(s.clockLabel, s.clockFormat, s.clock)
+	}
+}
+
+// stop halts everything start began, and may be started again afterwards.
+func (s *saverScene) stop() {
+	if !s.running {
+		return
+	}
+	s.running = false
+
+	for _, a := range s.anims {
+		a.Stop()
+	}
+	if s.clock != nil {
+		close(s.clock)
+		s.clock = nil
+	}
+}
+
+// defaultSaverUI tracks every scene it has built, as the screen saver asks for
+// one per screen and they all start and stop together.
 type defaultSaverUI struct {
-	quit  func()
-	pause *pauser
+	mu     sync.Mutex
+	scenes []*saverScene
 }
 
 func (d *defaultSaverUI) MakeUI(s *ScreenSaver) fyne.CanvasObject {
-	d.pause = newPauser()
+	loadFysh()
 
-	for i := 0; i < frameCount; i++ {
-		name := fmt.Sprintf("fysh%d.png", i)
-		frame, _ := frames.Open("frames/" + name)
+	ico1, a1 := newFysh(96)
+	l1 := &moveLayout{xInc: 2, yInc: 2}
 
-		full, _ := png.Decode(frame)
-		fyshes[i] = resize.Resize(uint(128), uint(128), full, resize.Lanczos3)
-		_ = frame.Close()
-	}
-
-	ico1 := newFysh(96, d.pause)
-	l1 := &moveLayout{xInc: 2, yInc: 2, pause: d.pause}
-
-	ico2 := newFysh(96, d.pause)
+	ico2, a2 := newFysh(96)
 	ico2.Move(fyne.NewPos(400, 100))
-	l2 := &moveLayout{xInc: 1.75, yInc: 1.75, invertX: true, pause: d.pause}
+	l2 := &moveLayout{xInc: 1.75, yInc: 1.75, invertX: true}
 
-	ico3 := newFysh(96, d.pause)
-	l3 := &moveLayout{xInc: 2.25, yInc: 2.25, pause: d.pause}
+	ico3, a3 := newFysh(96)
+	l3 := &moveLayout{xInc: 2.25, yInc: 2.25}
 	ico3.Move(fyne.NewPos(220, 310))
 	l3.invertY = true
 
-	ico4 := newFysh(128, d.pause)
-	l4 := &moveLayout{xInc: 1, yInc: 1, invertX: true, pause: d.pause}
+	ico4, a4 := newFysh(128)
+	l4 := &moveLayout{xInc: 1, yInc: 1, invertX: true}
 	ico4.Move(fyne.NewPos(450, 200))
 
-	ico5 := newFysh(128, d.pause)
-	l5 := &moveLayout{xInc: 1.25, yInc: 1.25, invertY: true, pause: d.pause}
+	ico5, a5 := newFysh(128)
+	l5 := &moveLayout{xInc: 1.25, yInc: 1.25, invertY: true}
 	ico5.Move(fyne.NewPos(150, 300))
 
+	scene := &saverScene{}
 	txt := canvas.NewText(s.Label, theme.Color(theme.ColorNameForeground))
 	if s.showClock() {
 		txt.Text = formattedTime(s.ClockFormat)
-		go clockText(txt, s.ClockFormat, d.pause)
+		scene.clockLabel, scene.clockFormat = txt, s.ClockFormat
 	}
 
 	txt.TextSize = 84
 	txt.Resize(txt.MinSize())
-	l6 := &moveLayout{xInc: 1.5, yInc: 1, pause: d.pause}
+	l6 := &moveLayout{xInc: 1.5, yInc: 1}
 
-	go l1.run()
-	go l2.run()
-	go l3.run()
-	go l4.run()
-	go l5.run()
-	go l6.run()
+	scene.anims = []*fyne.Animation{a1, a2, a3, a4, a5,
+		l1.animate(), l2.animate(), l3.animate(), l4.animate(), l5.animate(), l6.animate()}
 
-	d.quit = func() {
-		l1.stop()
-		l2.stop()
-		l3.stop()
-		l4.stop()
-		l5.stop()
-		l6.stop()
-	}
+	d.mu.Lock()
+	d.scenes = append(d.scenes, scene)
+	d.mu.Unlock()
 
 	return container.NewStack(
 		container.New(l6, txt),
@@ -296,30 +363,36 @@ func (s *ScreenSaver) MakeUI(w fyne.Window) fyne.CanvasObject {
 	)
 }
 
+// DestroyUI is called as the saver windows close, which happens to them all at
+// once, so we tear down every scene the first time through.
 func (d *defaultSaverUI) DestroyUI() {
-	if d.pause != nil {
-		d.pause.setPaused(false) // release any paused goroutines so they can exit
-	}
-	if d.quit == nil {
-		return
-	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
-	d.quit()
+	for _, scene := range d.scenes {
+		scene.stop()
+	}
+	d.scenes = nil
 }
 
-// Stop implements CustomUI: it pauses the animation goroutines while the system
-// is asleep so they do not queue canvas updates that would all run at once on
-// resume.
+// Stop implements CustomUI: it halts the animations while the system is asleep,
+// so we are not drawing for a screen that is not there.
 func (d *defaultSaverUI) Stop() {
-	if d.pause != nil {
-		d.pause.setPaused(true)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, scene := range d.scenes {
+		scene.stop()
 	}
 }
 
 // Start implements CustomUI, restarting the animations after wake.
 func (d *defaultSaverUI) Start() {
-	if d.pause != nil {
-		d.pause.setPaused(false)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, scene := range d.scenes {
+		scene.start()
 	}
 }
 
@@ -347,30 +420,33 @@ func (s *ScreenSaver) unlock() {
 
 var fyshCount = 0
 
-func newFysh(size int, pause *pauser) *canvas.Image {
+// newFysh returns a fysh of the given size alongside the animation that swims
+// it, which the caller starts. Each fysh begins on a different frame for variety.
+func newFysh(size int) (*canvas.Image, *fyne.Animation) {
 	ico := &canvas.Image{}
 	ico.Resize(fyne.NewSquareSize(float32(size)))
-	id := fyshCount % 5
+	offset := fyshCount % frameCount
 	fyshCount++
 
-	go func() {
-		for {
-			pause.wait() // block here rather than queue updates while suspended
-
-			fyne.DoAndWait(func() {
-				ico.Image = fyshes[id]
-				ico.Refresh()
-			})
-
-			id++
-			if id >= 5 {
-				id = 0
+	ico.Image = fyshes[offset]
+	shown := offset
+	anim := &fyne.Animation{
+		Duration:    fyshFrameTime * frameCount,
+		RepeatCount: fyne.AnimationRepeatForever,
+		Curve:       fyne.AnimationLinear,
+		Tick: func(done float32) {
+			id := (offset + int(done*frameCount)) % frameCount
+			if id == shown {
+				return
 			}
-			time.Sleep(time.Millisecond * 800)
-		}
-	}()
 
-	return ico
+			shown = id
+			ico.Image = fyshes[id]
+			ico.Refresh()
+		},
+	}
+
+	return ico, anim
 }
 
 func formattedTime(format string) string { // matching the desktop format
@@ -381,20 +457,29 @@ func formattedTime(format string) string { // matching the desktop format
 	return time.Now().Format("15:04")
 }
 
-func clockText(t *canvas.Text, format string, pause *pauser) {
+// clockText keeps the label showing the current time until done is closed.
+func clockText(t *canvas.Text, format string, done chan struct{}) {
 	oldTime := ""
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+
 	for {
-		pause.wait()
-		time.Sleep(time.Second)
+		select {
+		case <-done:
+			return
+		case <-tick.C:
+		}
 
 		txt := formattedTime(format)
-		if txt != oldTime {
-			oldTime = txt
-			fyne.DoAndWait(func() {
-				t.Text = txt
-				t.Resize(t.MinSize())
-			})
+		if txt == oldTime {
+			continue
 		}
+
+		oldTime = txt
+		fyne.DoAndWait(func() {
+			t.Text = txt
+			t.Resize(t.MinSize())
+		})
 	}
 }
 
@@ -402,6 +487,12 @@ func (s *ScreenSaver) startedInput(w fyne.Window) {
 	if s.started.After(time.Now().Add(time.Millisecond * -200)) {
 		return // something flickering as we start
 	}
+
+	// Input means we are plainly awake, even if the resume passed us by.
+	if s.asleep.CompareAndSwap(true, false) {
+		s.startUI()
+	}
+
 	if !s.Lock || (!s.LockImmediately && s.started.After(time.Now().Add(time.Second*-3))) {
 		showCursor(w)
 		s.unlock()
@@ -417,10 +508,8 @@ func (s *ScreenSaver) startedInput(w fyne.Window) {
 }
 
 type moveLayout struct {
-	size  fyne.Size
-	objs  []fyne.CanvasObject
-	quit  chan struct{}
-	pause *pauser
+	size fyne.Size
+	objs []fyne.CanvasObject
 
 	invertX, invertY bool
 	xInc, yInc       float32
@@ -471,35 +560,20 @@ func (m *moveLayout) move() {
 	o.Move(fyne.NewPos(x, y))
 }
 
-func (m *moveLayout) run() {
-	m.quit = make(chan struct{})
-	lastFrame := time.Now()
-	for {
-		select {
-		case <-m.quit:
-			return
-		default:
-			m.pause.wait()               // block while suspended instead of queueing moves
-			time.Sleep(time.Second / 60) // TODO use animation
-
-			now := time.Now()
-			delta := now.Sub(lastFrame)
-			lastFrame = now
-
-			// Skip frame if too much time has passed (e.g. after hibernate/resume)
-			if delta > time.Second {
-				continue
-			}
-
+// animate returns a looping animation that steps this layout's object along by
+// one frame each time it ticks. If drawing stalls, because the machine suspended
+// or an output powered down, the movement simply stops.
+func (m *moveLayout) animate() *fyne.Animation {
+	return &fyne.Animation{
+		Duration:    animationPeriod,
+		RepeatCount: fyne.AnimationRepeatForever,
+		Curve:       fyne.AnimationLinear,
+		Tick: func(float32) {
 			if len(m.objs) == 0 || m.size.Width == 0 {
-				continue
+				return
 			}
-			fyne.Do(m.move)
-		}
-	}
-}
 
-func (m *moveLayout) stop() {
-	close(m.quit)
-	m.quit = nil
+			m.move()
+		},
+	}
 }
