@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"log"
 	"sync"
@@ -333,6 +334,7 @@ func (d *defaultSaverUI) MakeUI(s *ScreenSaver) fyne.CanvasObject {
 	d.mu.Unlock()
 
 	return container.NewStack(
+		canvas.NewRectangle(color.Black),
 		container.New(l6, txt),
 		container.New(l5, ico5),
 		container.New(l4, ico4),
