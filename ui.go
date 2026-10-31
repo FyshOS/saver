@@ -80,6 +80,7 @@ type ScreenSaver struct {
 // prepare records the state we are starting in and begins listening for system
 // suspend/resume, so the UI can stop its animations while asleep.
 func (s *ScreenSaver) prepare() {
+	initCursor()
 	s.asleep.Store(s.Suspending)
 
 	if s.suspendStop != nil {
@@ -111,7 +112,6 @@ func (s *ScreenSaver) startUI() {
 
 func NewScreenSaver(onUnlocked func()) *ScreenSaver {
 	s := &ScreenSaver{OnUnlocked: onUnlocked}
-	initCursor()
 	s.started = time.Now()
 	return s
 }

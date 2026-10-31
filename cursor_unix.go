@@ -3,6 +3,8 @@
 package saver
 
 import (
+	"sync"
+
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xfixes"
 	"github.com/BurntSushi/xgb/xproto"
@@ -11,26 +13,35 @@ import (
 	"fyne.io/fyne/v2/driver"
 )
 
-var conn *xgb.Conn
+var (
+	conn     *xgb.Conn
+	connOnce sync.Once
+)
 
+// initCursor opens the X connection used to hide and show the cursor and checks
+// It runs once for the process and publishes the connection only once it is ready.
 func initCursor() {
-	var err error
-	conn, err = xgb.NewConn()
-	if err != nil {
-		fyne.LogError("Failed to connect to X11 to hide cursor", err)
-		return
-	}
+	connOnce.Do(func() {
+		c, err := xgb.NewConn()
+		if err != nil {
+			fyne.LogError("Failed to connect to X11 to hide cursor", err)
+			return
+		}
 
-	err = xfixes.Init(conn)
-	if err != nil {
-		fyne.LogError("Failed to init fixes extension to X11 to hide cursor", err)
-		return
-	}
+		err = xfixes.Init(c)
+		if err != nil {
+			fyne.LogError("Failed to init fixes extension to X11 to hide cursor", err)
+			c.Close()
+			return
+		}
 
-	r, err := xfixes.QueryVersion(conn, 4, 0).Reply()
-	if err != nil || r.MajorVersion < 4 {
-		return
-	}
+		r, err := xfixes.QueryVersion(c, 4, 0).Reply()
+		if err != nil || r.MajorVersion < 4 {
+			c.Close()
+			return
+		}
+		conn = c
+	})
 }
 
 func doHideCursor(ctx any) {
