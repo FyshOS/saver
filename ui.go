@@ -181,10 +181,10 @@ func (s *ScreenSaver) ShowWindow() {
 		hideCursor(w)
 	}()
 
-	fyne.CurrentApp().Lifecycle().SetOnEnteredForeground(s.loadContent)
 	s.registerWindow(w)
 	w.SetFullScreen(true)
 	w.Show()
+	go fyne.Do(s.loadContent) // fill once shown, don't delay show
 }
 
 func (s *ScreenSaver) ShowWindows() {
@@ -196,9 +196,9 @@ func (s *ScreenSaver) ShowWindows() {
 		hideCursor(w)
 	}()
 
-	fyne.CurrentApp().Lifecycle().SetOnEnteredForeground(s.loadContent)
 	s.registerWindow(w)
 	w.Show()
+	go fyne.Do(s.loadContent) // fill once shown, don't delay show
 
 	go func() {
 		conn, err := xgb.NewConn()
